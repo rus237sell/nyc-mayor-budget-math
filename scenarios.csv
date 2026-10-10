@@ -1,0 +1,4 @@
+scenario,cost_low_$M,cost_high_$M,revenue_$M,coverage_low_%,coverage_high_%,note
+"All pledges, campaign-figure costs",17760,24660,10000,56.3,40.6,Baseline comparison.
+"Operating-only pledges, campaign-figure costs",7760,14660,10000,128.9,68.2,Excludes $100B/10-yr housing capital plan (not operating).
+Operating-only pledges vs Albany-independent revenue only,7760,14660,1000,12.9,6.8,City-controlled revenue is only the fines/waste line ($1B); the other $9B needs Albany approval.

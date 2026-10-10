@@ -1,7 +1,7 @@
-item,cost_low_$M,cost_high_$M,mid_$M,share_of_FY27_budget_%,note
-Fare-free buses,700,800,750.0,0.6,Campaign cited ~$700M/yr lost fare revenue; analysts up to ~$800M.
-Universal childcare (6wk-5yr),5900,12700,9300.0,7.39,Campaign estimate ~$5.9B; independent analyses range $2.5B-$12.7B.
-City-owned grocery stores,60,60,60.0,0.05,Campaign pilot: ~$60M/yr.
-Dept. of Community Safety,1100,1100,1100.0,0.87,Campaign budgeted ~$1.1B/yr.
-Rent freeze (rent-stabilized),0,0,0.0,0.0,No direct budget cost; cost borne by landlords via forgone rent.
-200k affordable units / 10 yrs,10000,10000,10000.0,7.95,Campaign: $100B over 10 years => ~$10B/yr run rate (mostly capital).
+item,kind,cost_low_$M,cost_high_$M,mid_$M,share_of_FY27_budget_%,note
+Fare-free buses,operating,700,800,750.0,0.6,Campaign cited ~$700M/yr lost fare revenue; analysts up to ~$800M.
+Universal childcare (6wk-5yr),operating,5900,12700,9300.0,7.39,Campaign estimate ~$5.9B; independent analyses range $2.5B-$12.7B.
+City-owned grocery stores,operating,60,60,60.0,0.05,Campaign pilot: ~$60M/yr.
+Dept. of Community Safety,operating,1100,1100,1100.0,0.87,Campaign budgeted ~$1.1B/yr.
+Rent freeze (rent-stabilized),none,0,0,0.0,0.0,No direct budget cost; cost borne by landlords via forgone rent.
+200k affordable units / 10 yrs,capital,10000,10000,10000.0,7.95,Campaign: $100B over 10 years => ~$10B/yr run rate (mostly capital).
