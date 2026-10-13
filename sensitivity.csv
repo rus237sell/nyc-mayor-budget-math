@@ -1,0 +1,5 @@
+albany_outcome,albany_revenue_$M,total_revenue_$M,coverage_of_operating_low_%,coverage_of_operating_high_%,gap_vs_operating_low_$M,gap_vs_operating_high_$M,note
+Both Albany taxes approved,9000,10000,128.9,68.2,2240,-4660,Baseline Albany outcome from scenarios.csv.
+Corp tax only,5000,6000,77.3,40.9,-1760,-8660,Operating-only costs only; housing capital plan excluded.
+Income tax only,4000,5000,64.4,34.1,-2760,-9660,Operating-only costs only; housing capital plan excluded.
+Neither Albany tax approved,0,1000,12.9,6.8,-6760,-13660,Operating-only costs only; housing capital plan excluded.

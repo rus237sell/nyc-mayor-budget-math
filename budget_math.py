@@ -108,6 +108,67 @@ def main():
         w.writeheader()
         w.writerows(scenario_rows)
 
+    # ---- v3 cut: Albany partial-approval sensitivity (operating-only) ----
+    # v2 treated Albany as all-or-nothing. In practice Albany could approve
+    # one tax and not the other, so test each combination against the
+    # operating-only cost range. City-controlled revenue is in every case.
+    albany_items = {r[0]: r[1] for r in REVENUE if r[2]}
+    corp_tax = next(v for k, v in albany_items.items() if k.startswith("Corp tax"))
+    income_tax = next(v for k, v in albany_items.items() if "income tax" in k)
+    albany_outcomes = [
+        ("Both Albany taxes approved", corp_tax + income_tax),
+        ("Corp tax only", corp_tax),
+        ("Income tax only", income_tax),
+        ("Neither Albany tax approved", 0),
+    ]
+    sensitivity_rows = []
+    for label, albany_rev in albany_outcomes:
+        total_rev = revenue_city + albany_rev
+        sensitivity_rows.append({
+            "albany_outcome": label,
+            "albany_revenue_$M": albany_rev,
+            "total_revenue_$M": total_rev,
+            "coverage_of_operating_low_%": round(total_rev / op_low * 100, 1),
+            "coverage_of_operating_high_%": round(total_rev / op_high * 100, 1),
+            "gap_vs_operating_low_$M": total_rev - op_low,
+            "gap_vs_operating_high_$M": total_rev - op_high,
+            "note": ("Operating-only costs only; housing capital plan excluded."
+                     if label != "Both Albany taxes approved" else
+                     "Baseline Albany outcome from scenarios.csv."),
+        })
+    sensitivity_path = os.path.join(HERE, "sensitivity.csv")
+    with open(sensitivity_path, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=list(sensitivity_rows[0].keys()))
+        w.writeheader()
+        w.writerows(sensitivity_rows)
+
+    # Childcare is the swing item: its low-high range alone is almost the
+    # entire width of the operating cost range.
+    childcare = next(p for p in PLEDGES if p[0].startswith("Universal childcare"))
+    childcare_swing = childcare[2] - childcare[1]
+    operating_swing = op_high - op_low
+
+    fig3, ax3 = plt.subplots(figsize=(8, 3.8))
+    sens_labels = [r["albany_outcome"].replace(" approved", "")
+                   for r in sensitivity_rows]
+    sens_rev = [r["total_revenue_$M"] / 1000 for r in sensitivity_rows]
+    bars = ax3.barh(sens_labels[::-1], sens_rev[::-1], color="#1f4e79")
+    for b, v in zip(bars, sens_rev[::-1]):
+        ax3.text(v + 0.15, b.get_y() + b.get_height() / 2, f"${v:.0f}B",
+                 va="center", fontsize=10)
+    ax3.axvline(op_low / 1000, color="#b00020", linestyle="--", linewidth=1.5,
+                label=f"Operating costs, campaign figure: ${op_low/1000:.1f}B")
+    ax3.axvline(op_high / 1000, color="#7fa8c9", linestyle="--", linewidth=1.5,
+                label=f"Operating costs, analyst high: ${op_high/1000:.1f}B")
+    ax3.set_xlim(0, max(op_high / 1000, max(sens_rev)) * 1.18)
+    ax3.set_xlabel("Annual revenue ($B)")
+    ax3.set_title("Operating-only pledges: revenue by Albany outcome\n"
+                  "(city-controlled $1B included in every bar)")
+    ax3.legend(loc="lower right", fontsize=8)
+    fig3.tight_layout()
+    fig3.savefig(os.path.join(HERE, "results_sensitivity.png"), dpi=120)
+    plt.close(fig3)
+
     # ---- new chart: operating-only costs vs city-controlled revenue ----
     fig2, ax2 = plt.subplots(figsize=(8, 3.4))
     cats = ["Operating pledge costs\n(campaign figure)", "Operating pledge costs\n(analyst high)",
@@ -204,8 +265,18 @@ def main():
           f"(${revenue_albany/1000:.0f}B of ${revenue/1000:.0f}B)")
     print(f"Operating cost per NYC household: "
           f"${(op_low + op_high)/2*1e6/NYC_HOUSEHOLDS:,.0f}/yr (mid estimate)")
-    print("Sources: SOURCES.md (results.csv, scenarios.csv, results.png,")
-    print("results_operating.png written).")
+    print()
+    print("--- Albany partial-approval sensitivity (operating-only) ---")
+    for r in sensitivity_rows:
+        print(f"{r['albany_outcome']}: ${r['total_revenue_$M']/1000:.0f}B revenue "
+              f"covers {r['coverage_of_operating_low_%']:.0f}% of campaign-figure "
+              f"operating costs, {r['coverage_of_operating_high_%']:.0f}% at analyst high")
+    print(f"Childcare swing: ${childcare_swing/1000:.1f}B low-to-high is "
+          f"{childcare_swing/operating_swing*100:.0f}% of the "
+          f"${operating_swing/1000:.1f}B operating cost range — "
+          f"one pledge drives nearly all the uncertainty.")
+    print("Sources: SOURCES.md (results.csv, scenarios.csv, sensitivity.csv,")
+    print("results.png, results_operating.png, results_sensitivity.png written).")
 
 
 if __name__ == "__main__":
