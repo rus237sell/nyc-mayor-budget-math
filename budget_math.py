@@ -148,6 +148,63 @@ def main():
     childcare_swing = childcare[2] - childcare[1]
     operating_swing = op_high - op_low
 
+    # ---- v4 cut: childcare cost sensitivity (operating-only) ----
+    # v3 showed childcare drives the operating range, so test it across its
+    # full published range ($2.5B analyst low in SOURCES.md to $12.7B high),
+    # holding the other operating pledges at their campaign figures. The
+    # break-even childcare cost is pledged revenue minus those other costs:
+    # above it, even full pledged revenue cannot cover operating pledges.
+    other_operating = op_low - childcare[1]
+    childcare_cases = [
+        ("Analyst low", 2_500),
+        ("Campaign figure", childcare[1]),
+        ("Midpoint of published range", (2_500 + childcare[2]) // 2),
+        ("Analyst high", childcare[2]),
+    ]
+    breakeven_childcare = revenue - other_operating
+    childcare_rows = []
+    for label, cc_cost in childcare_cases:
+        total_op = other_operating + cc_cost
+        childcare_rows.append({
+            "childcare_case": label,
+            "childcare_cost_$M": cc_cost,
+            "other_operating_$M": other_operating,
+            "total_operating_$M": total_op,
+            "coverage_full_pledged_%": round(revenue / total_op * 100, 1),
+            "coverage_city_only_%": round(revenue_city / total_op * 100, 1),
+            "gap_vs_full_pledged_$M": revenue - total_op,
+            "childcare_share_of_operating_%": round(cc_cost / total_op * 100, 1),
+            "note": (f"Other operating pledges held at campaign figures "
+                     f"(${other_operating/1000:.2f}B); full pledged revenue "
+                     f"${revenue/1000:.0f}B, city-controlled ${revenue_city/1000:.0f}B."),
+        })
+    childcare_path = os.path.join(HERE, "childcare_sensitivity.csv")
+    with open(childcare_path, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=list(childcare_rows[0].keys()))
+        w.writeheader()
+        w.writerows(childcare_rows)
+
+    fig4, ax4 = plt.subplots(figsize=(8, 3.8))
+    cc_labels = [r["childcare_case"] for r in childcare_rows]
+    cc_totals = [r["total_operating_$M"] / 1000 for r in childcare_rows]
+    bars = ax4.bar(cc_labels, cc_totals, color="#1f4e79")
+    for b, v in zip(bars, cc_totals):
+        ax4.text(b.get_x() + b.get_width() / 2, v + 0.3, f"${v:.1f}B",
+                 ha="center", va="bottom", fontsize=10)
+    ax4.axhline(revenue / 1000, color="#b00020", linestyle="--", linewidth=1.5,
+                label=f"Full pledged revenue: ${revenue/1000:.0f}B")
+    ax4.axhline(revenue_city / 1000, color="#7fa8c9", linestyle="--",
+                linewidth=1.5,
+                label=f"City-controlled revenue only: ${revenue_city/1000:.0f}B")
+    ax4.set_ylim(0, max(cc_totals) * 1.22)
+    ax4.set_ylabel("Total operating pledge costs ($B)")
+    ax4.set_title("Operating costs by childcare cost case\n"
+                  "(other operating pledges at campaign figures)")
+    ax4.legend(loc="upper left", fontsize=8)
+    fig4.tight_layout()
+    fig4.savefig(os.path.join(HERE, "results_childcare.png"), dpi=120)
+    plt.close(fig4)
+
     fig3, ax3 = plt.subplots(figsize=(8, 3.8))
     sens_labels = [r["albany_outcome"].replace(" approved", "")
                    for r in sensitivity_rows]
@@ -275,8 +332,19 @@ def main():
           f"{childcare_swing/operating_swing*100:.0f}% of the "
           f"${operating_swing/1000:.1f}B operating cost range — "
           f"one pledge drives nearly all the uncertainty.")
+    print()
+    print("--- Childcare cost sensitivity (operating-only) ---")
+    for r in childcare_rows:
+        print(f"{r['childcare_case']}: childcare ${r['childcare_cost_$M']/1000:.1f}B "
+              f"-> operating ${r['total_operating_$M']/1000:.1f}B; full pledged "
+              f"revenue covers {r['coverage_full_pledged_%']:.0f}%, "
+              f"city-controlled only {r['coverage_city_only_%']:.0f}%")
+    print(f"Break-even childcare cost: ${breakeven_childcare/1000:.2f}B — above "
+          f"that, even the full ${revenue/1000:.0f}B pledged revenue cannot "
+          f"cover the operating pledges.")
     print("Sources: SOURCES.md (results.csv, scenarios.csv, sensitivity.csv,")
-    print("results.png, results_operating.png, results_sensitivity.png written).")
+    print("childcare_sensitivity.csv, results.png, results_operating.png,")
+    print("results_sensitivity.png, results_childcare.png written).")
 
 
 if __name__ == "__main__":
