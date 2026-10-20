@@ -184,6 +184,61 @@ def main():
         w.writeheader()
         w.writerows(childcare_rows)
 
+    # ---- v5 cut: revenue realization sensitivity ----
+    # Costs carry a low-high range in this model but revenue is a single
+    # campaign point estimate ($10B). Test what happens if the pledged
+    # taxes collect less than estimated: realized revenue at 100/75/50/25%
+    # of the campaign figure, against operating-only and total costs. The
+    # break-even realization rate is the share of pledged revenue that
+    # must actually materialize to cover a given cost level.
+    realization_cases = [100, 75, 50, 25]
+    breakeven_op_low = round(op_low / revenue * 100, 1)
+    breakeven_op_high = round(op_high / revenue * 100, 1)
+    breakeven_total_low = round(cost_low / revenue * 100, 1)
+    revenue_rows = []
+    for pct in realization_cases:
+        realized = revenue * pct // 100
+        revenue_rows.append({
+            "realization_%": pct,
+            "realized_revenue_$M": realized,
+            "coverage_of_operating_low_%": round(realized / op_low * 100, 1),
+            "coverage_of_operating_high_%": round(realized / op_high * 100, 1),
+            "coverage_of_total_low_%": round(realized / cost_low * 100, 1),
+            "gap_vs_operating_low_$M": realized - op_low,
+            "note": (f"Break-even realization: {breakeven_op_low}% of pledged "
+                     f"revenue covers operating costs at campaign figures; "
+                     f"{breakeven_op_high}% would be needed at analyst high "
+                     f"and {breakeven_total_low}% for all pledges at "
+                     f"campaign figures (both above 100%, so unreachable)."),
+        })
+    revenue_path = os.path.join(HERE, "revenue_sensitivity.csv")
+    with open(revenue_path, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=list(revenue_rows[0].keys()))
+        w.writeheader()
+        w.writerows(revenue_rows)
+
+    fig5, ax5 = plt.subplots(figsize=(8, 3.8))
+    rev_labels = [f"{r['realization_%']}%" for r in revenue_rows]
+    rev_vals = [r["realized_revenue_$M"] / 1000 for r in revenue_rows]
+    bars = ax5.bar(rev_labels, rev_vals, color="#1f4e79")
+    for b, v in zip(bars, rev_vals):
+        ax5.text(b.get_x() + b.get_width() / 2, v + 0.3, f"${v:.1f}B",
+                 ha="center", va="bottom", fontsize=10)
+    ax5.axhline(op_low / 1000, color="#b00020", linestyle="--", linewidth=1.5,
+                label=f"Operating costs, campaign figure: ${op_low/1000:.1f}B")
+    ax5.axhline(op_high / 1000, color="#7fa8c9", linestyle="--",
+                linewidth=1.5,
+                label=f"Operating costs, analyst high: ${op_high/1000:.1f}B")
+    ax5.set_ylim(0, max(op_high / 1000, max(rev_vals)) * 1.18)
+    ax5.set_xlabel("Share of pledged revenue actually collected")
+    ax5.set_ylabel("Realized revenue ($B)")
+    ax5.set_title("Pledged revenue at 100/75/50/25% realization\n"
+                  "vs. operating-only pledge costs")
+    ax5.legend(loc="upper right", fontsize=8)
+    fig5.tight_layout()
+    fig5.savefig(os.path.join(HERE, "results_revenue.png"), dpi=120)
+    plt.close(fig5)
+
     fig4, ax4 = plt.subplots(figsize=(8, 3.8))
     cc_labels = [r["childcare_case"] for r in childcare_rows]
     cc_totals = [r["total_operating_$M"] / 1000 for r in childcare_rows]
@@ -342,9 +397,23 @@ def main():
     print(f"Break-even childcare cost: ${breakeven_childcare/1000:.2f}B — above "
           f"that, even the full ${revenue/1000:.0f}B pledged revenue cannot "
           f"cover the operating pledges.")
+    print()
+    print("--- Revenue realization sensitivity ---")
+    for r in revenue_rows:
+        print(f"{r['realization_%']}% realized: ${r['realized_revenue_$M']/1000:.1f}B "
+              f"covers {r['coverage_of_operating_low_%']:.0f}% of campaign-figure "
+              f"operating costs, {r['coverage_of_operating_high_%']:.0f}% at "
+              f"analyst high, {r['coverage_of_total_low_%']:.0f}% of all pledges")
+    print(f"Break-even realization: {breakeven_op_low:.1f}% of pledged revenue "
+          f"must materialize to cover operating costs at campaign figures; "
+          f"at 75% realization the operating surplus flips to a "
+          f"${abs(revenue_rows[1]['gap_vs_operating_low_$M'])/1000:.2f}B gap. "
+          f"Analyst-high operating costs need {breakeven_op_high:.1f}% and "
+          f"all pledges need {breakeven_total_low:.1f}% — both unreachable.")
     print("Sources: SOURCES.md (results.csv, scenarios.csv, sensitivity.csv,")
-    print("childcare_sensitivity.csv, results.png, results_operating.png,")
-    print("results_sensitivity.png, results_childcare.png written).")
+    print("childcare_sensitivity.csv, revenue_sensitivity.csv, results.png,")
+    print("results_operating.png, results_sensitivity.png,")
+    print("results_childcare.png, results_revenue.png written).")
 
 
 if __name__ == "__main__":
