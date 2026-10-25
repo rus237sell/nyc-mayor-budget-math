@@ -1,0 +1,17 @@
+albany_outcome,pledged_revenue_$M,realization_%,realized_revenue_$M,coverage_of_operating_low_%,coverage_of_operating_high_%,gap_vs_operating_low_$M,covers_operating_low,breakeven_realization_%,note
+Both Albany taxes approved,10000,100,10000,128.9,68.2,2240,Yes,77.6,Break-even realization for this Albany outcome is 77.6% of its pledged total.
+Both Albany taxes approved,10000,75,7500,96.6,51.2,-260,No,77.6,Break-even realization for this Albany outcome is 77.6% of its pledged total.
+Both Albany taxes approved,10000,50,5000,64.4,34.1,-2760,No,77.6,Break-even realization for this Albany outcome is 77.6% of its pledged total.
+Both Albany taxes approved,10000,25,2500,32.2,17.1,-5260,No,77.6,Break-even realization for this Albany outcome is 77.6% of its pledged total.
+Corp tax only,6000,100,6000,77.3,40.9,-1760,No,129.3,"Break-even realization for this Albany outcome is 129.3% of its pledged total (above 100%, so unreachable)."
+Corp tax only,6000,75,4500,58.0,30.7,-3260,No,129.3,"Break-even realization for this Albany outcome is 129.3% of its pledged total (above 100%, so unreachable)."
+Corp tax only,6000,50,3000,38.7,20.5,-4760,No,129.3,"Break-even realization for this Albany outcome is 129.3% of its pledged total (above 100%, so unreachable)."
+Corp tax only,6000,25,1500,19.3,10.2,-6260,No,129.3,"Break-even realization for this Albany outcome is 129.3% of its pledged total (above 100%, so unreachable)."
+Income tax only,5000,100,5000,64.4,34.1,-2760,No,155.2,"Break-even realization for this Albany outcome is 155.2% of its pledged total (above 100%, so unreachable)."
+Income tax only,5000,75,3750,48.3,25.6,-4010,No,155.2,"Break-even realization for this Albany outcome is 155.2% of its pledged total (above 100%, so unreachable)."
+Income tax only,5000,50,2500,32.2,17.1,-5260,No,155.2,"Break-even realization for this Albany outcome is 155.2% of its pledged total (above 100%, so unreachable)."
+Income tax only,5000,25,1250,16.1,8.5,-6510,No,155.2,"Break-even realization for this Albany outcome is 155.2% of its pledged total (above 100%, so unreachable)."
+Neither Albany tax approved,1000,100,1000,12.9,6.8,-6760,No,776.0,"Break-even realization for this Albany outcome is 776.0% of its pledged total (above 100%, so unreachable)."
+Neither Albany tax approved,1000,75,750,9.7,5.1,-7010,No,776.0,"Break-even realization for this Albany outcome is 776.0% of its pledged total (above 100%, so unreachable)."
+Neither Albany tax approved,1000,50,500,6.4,3.4,-7260,No,776.0,"Break-even realization for this Albany outcome is 776.0% of its pledged total (above 100%, so unreachable)."
+Neither Albany tax approved,1000,25,250,3.2,1.7,-7510,No,776.0,"Break-even realization for this Albany outcome is 776.0% of its pledged total (above 100%, so unreachable)."

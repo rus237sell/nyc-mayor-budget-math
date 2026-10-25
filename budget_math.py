@@ -71,6 +71,59 @@ def proposed_revenue(albany_required=None):
     return sum(r[1] for r in items)
 
 
+def albany_outcome_totals():
+    """(label, total pledged revenue $M) for each Albany outcome.
+
+    City-controlled revenue (the fines/waste line) is in every total; the
+    Albany lines are added only in the outcomes where Albany approves them.
+    """
+    city = proposed_revenue(albany_required=False)
+    albany = {r[0]: r[1] for r in REVENUE if r[2]}
+    corp = next(v for k, v in albany.items() if k.startswith("Corp tax"))
+    income = next(v for k, v in albany.items() if "income tax" in k)
+    return [
+        ("Both Albany taxes approved", city + corp + income),
+        ("Corp tax only", city + corp),
+        ("Income tax only", city + income),
+        ("Neither Albany tax approved", city),
+    ]
+
+
+def joint_sensitivity_rows(realization_cases=(100, 75, 50, 25)):
+    """Albany outcome x revenue realization grid, operating-only costs.
+
+    v3 tested Albany approval on its own and v5 tested realization on its
+    own; the two risks can land together, so cross them: each Albany
+    outcome's pledged total is collected at each realization rate and
+    compared with operating-only costs. The break-even realization for an
+    outcome is operating cost (campaign figure) over its pledged total --
+    above 100% it is unreachable even if the approved taxes collect in
+    full.
+    """
+    op_low, op_high = annual_costs(kind="operating")
+    rows = []
+    for label, base in albany_outcome_totals():
+        breakeven = round(op_low / base * 100, 1)
+        for pct in realization_cases:
+            realized = base * pct // 100
+            rows.append({
+                "albany_outcome": label,
+                "pledged_revenue_$M": base,
+                "realization_%": pct,
+                "realized_revenue_$M": realized,
+                "coverage_of_operating_low_%": round(realized / op_low * 100, 1),
+                "coverage_of_operating_high_%": round(realized / op_high * 100, 1),
+                "gap_vs_operating_low_$M": realized - op_low,
+                "covers_operating_low": "Yes" if realized >= op_low else "No",
+                "breakeven_realization_%": breakeven,
+                "note": (f"Break-even realization for this Albany outcome is "
+                         f"{breakeven}% of its pledged total"
+                         + (" (above 100%, so unreachable)."
+                            if breakeven > 100 else ".")),
+            })
+    return rows
+
+
 def main():
     cost_low, cost_high = annual_costs()
     revenue = proposed_revenue()
@@ -217,6 +270,20 @@ def main():
         w.writeheader()
         w.writerows(revenue_rows)
 
+    # ---- v6 cut: joint Albany x realization sensitivity ----
+    # v3 and v5 each varied one revenue risk at a time. Cross them: a
+    # partial Albany approval that also under-collects is the realistic
+    # downside, and no single-axis table shows how few combinations cover
+    # even campaign-figure operating costs.
+    joint_rows = joint_sensitivity_rows(realization_cases)
+    joint_path = os.path.join(HERE, "joint_sensitivity.csv")
+    with open(joint_path, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=list(joint_rows[0].keys()))
+        w.writeheader()
+        w.writerows(joint_rows)
+    joint_covering = [r for r in joint_rows
+                      if r["covers_operating_low"] == "Yes"]
+
     fig5, ax5 = plt.subplots(figsize=(8, 3.8))
     rev_labels = [f"{r['realization_%']}%" for r in revenue_rows]
     rev_vals = [r["realized_revenue_$M"] / 1000 for r in revenue_rows]
@@ -238,6 +305,32 @@ def main():
     fig5.tight_layout()
     fig5.savefig(os.path.join(HERE, "results_revenue.png"), dpi=120)
     plt.close(fig5)
+
+    # Heatmap of the joint grid: coverage of campaign-figure operating
+    # costs (%) by Albany outcome (rows) x realization rate (columns).
+    outcome_labels = [label for label, _ in albany_outcome_totals()]
+    grid = [[next(r["coverage_of_operating_low_%"] for r in joint_rows
+                  if r["albany_outcome"] == label
+                  and r["realization_%"] == pct)
+             for pct in realization_cases]
+            for label in outcome_labels]
+    fig6, ax6 = plt.subplots(figsize=(8, 4.2))
+    im = ax6.imshow(grid, cmap="RdYlGn", vmin=0, vmax=130)
+    ax6.set_xticks(range(len(realization_cases)))
+    ax6.set_xticklabels([f"{p}% realized" for p in realization_cases])
+    ax6.set_yticks(range(len(outcome_labels)))
+    ax6.set_yticklabels([label.replace(" approved", "")
+                         for label in outcome_labels], fontsize=9)
+    for i, row in enumerate(grid):
+        for j, v in enumerate(row):
+            ax6.text(j, i, f"{v:.1f}%", ha="center", va="center",
+                     fontsize=10, color="black" if v < 115 else "white")
+    ax6.set_title("Coverage of campaign-figure operating costs ($7.8B)\n"
+                  "by Albany outcome and revenue realization")
+    fig6.colorbar(im, ax=ax6, label="Coverage (%)")
+    fig6.tight_layout()
+    fig6.savefig(os.path.join(HERE, "results_joint.png"), dpi=120)
+    plt.close(fig6)
 
     fig4, ax4 = plt.subplots(figsize=(8, 3.8))
     cc_labels = [r["childcare_case"] for r in childcare_rows]
@@ -410,10 +503,28 @@ def main():
           f"${abs(revenue_rows[1]['gap_vs_operating_low_$M'])/1000:.2f}B gap. "
           f"Analyst-high operating costs need {breakeven_op_high:.1f}% and "
           f"all pledges need {breakeven_total_low:.1f}% — both unreachable.")
+    print()
+    print("--- Joint Albany x realization sensitivity (operating-only) ---")
+    for label, base in albany_outcome_totals():
+        cells = [r for r in joint_rows if r["albany_outcome"] == label]
+        covers = ", ".join(
+            f"{r['realization_%']}% -> {r['coverage_of_operating_low_%']:.1f}%"
+            for r in cells)
+        print(f"{label} (pledged ${base/1000:.0f}B, break-even "
+              f"realization {cells[0]['breakeven_realization_%']:.1f}%): {covers}")
+    print(f"Only {len(joint_covering)} of {len(joint_rows)} combinations cover "
+          f"campaign-figure operating costs: both taxes approved and "
+          f"collected in full. Every partial-approval outcome needs more "
+          f"than 100% realization to break even, and the joint downside "
+          f"(neither tax, 25% realized) collects "
+          f"${joint_rows[-1]['realized_revenue_$M']/1000:.2f}B against "
+          f"${op_low/1000:.1f}B of operating costs "
+          f"({joint_rows[-1]['coverage_of_operating_low_%']:.1f}% coverage).")
     print("Sources: SOURCES.md (results.csv, scenarios.csv, sensitivity.csv,")
-    print("childcare_sensitivity.csv, revenue_sensitivity.csv, results.png,")
-    print("results_operating.png, results_sensitivity.png,")
-    print("results_childcare.png, results_revenue.png written).")
+    print("childcare_sensitivity.csv, revenue_sensitivity.csv,")
+    print("joint_sensitivity.csv, results.png, results_operating.png,")
+    print("results_sensitivity.png, results_childcare.png,")
+    print("results_revenue.png, results_joint.png written).")
 
 
 if __name__ == "__main__":
