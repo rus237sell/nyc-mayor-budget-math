@@ -1,0 +1,17 @@
+albany_outcome,total_revenue_$M,childcare_case,childcare_cost_$M,other_operating_$M,total_operating_$M,coverage_%,gap_$M,covers_operating,breakeven_childcare_$M,note
+Both Albany taxes approved,10000,Analyst low,2500,1860,4360,229.4,5640,Yes,8140,Break-even childcare cost for this Albany outcome is $8.14B.
+Both Albany taxes approved,10000,Campaign figure,5900,1860,7760,128.9,2240,Yes,8140,Break-even childcare cost for this Albany outcome is $8.14B.
+Both Albany taxes approved,10000,Midpoint of published range,7600,1860,9460,105.7,540,Yes,8140,Break-even childcare cost for this Albany outcome is $8.14B.
+Both Albany taxes approved,10000,Analyst high,12700,1860,14560,68.7,-4560,No,8140,Break-even childcare cost for this Albany outcome is $8.14B.
+Corp tax only,6000,Analyst low,2500,1860,4360,137.6,1640,Yes,4140,Break-even childcare cost for this Albany outcome is $4.14B.
+Corp tax only,6000,Campaign figure,5900,1860,7760,77.3,-1760,No,4140,Break-even childcare cost for this Albany outcome is $4.14B.
+Corp tax only,6000,Midpoint of published range,7600,1860,9460,63.4,-3460,No,4140,Break-even childcare cost for this Albany outcome is $4.14B.
+Corp tax only,6000,Analyst high,12700,1860,14560,41.2,-8560,No,4140,Break-even childcare cost for this Albany outcome is $4.14B.
+Income tax only,5000,Analyst low,2500,1860,4360,114.7,640,Yes,3140,Break-even childcare cost for this Albany outcome is $3.14B.
+Income tax only,5000,Campaign figure,5900,1860,7760,64.4,-2760,No,3140,Break-even childcare cost for this Albany outcome is $3.14B.
+Income tax only,5000,Midpoint of published range,7600,1860,9460,52.9,-4460,No,3140,Break-even childcare cost for this Albany outcome is $3.14B.
+Income tax only,5000,Analyst high,12700,1860,14560,34.3,-9560,No,3140,Break-even childcare cost for this Albany outcome is $3.14B.
+Neither Albany tax approved,1000,Analyst low,2500,1860,4360,22.9,-3360,No,-860,Break-even childcare cost for this Albany outcome is $-0.86B (negative: this revenue cannot cover even the non-childcare operating pledges).
+Neither Albany tax approved,1000,Campaign figure,5900,1860,7760,12.9,-6760,No,-860,Break-even childcare cost for this Albany outcome is $-0.86B (negative: this revenue cannot cover even the non-childcare operating pledges).
+Neither Albany tax approved,1000,Midpoint of published range,7600,1860,9460,10.6,-8460,No,-860,Break-even childcare cost for this Albany outcome is $-0.86B (negative: this revenue cannot cover even the non-childcare operating pledges).
+Neither Albany tax approved,1000,Analyst high,12700,1860,14560,6.9,-13560,No,-860,Break-even childcare cost for this Albany outcome is $-0.86B (negative: this revenue cannot cover even the non-childcare operating pledges).

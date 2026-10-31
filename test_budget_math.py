@@ -1,4 +1,5 @@
-"""Unit tests for budget_math: sourced totals and the v6 joint grid.
+"""Unit tests for budget_math: sourced totals, the v6 joint grid,
+and the v7 childcare x Albany grid.
 
 Run: python3 -m unittest test_budget_math -v
 """
@@ -80,6 +81,72 @@ class TestJointSensitivity(unittest.TestCase):
     def test_no_combination_covers_operating_high(self):
         self.assertTrue(all(r["coverage_of_operating_high_%"] < 100
                             for r in self.rows))
+
+
+class TestChildcareAlbany(unittest.TestCase):
+    def setUp(self):
+        self.rows = bm.childcare_albany_rows()
+
+    def test_grid_shape(self):
+        self.assertEqual(len(self.rows), 16)  # 4 Albany outcomes x 4 cases
+        cases = {r["childcare_case"] for r in self.rows}
+        self.assertEqual(len(cases), 4)
+
+    def test_childcare_cases_match_v4_range(self):
+        self.assertEqual(bm.childcare_case_list(),
+                         [("Analyst low", 2_500),
+                          ("Campaign figure", 5_900),
+                          ("Midpoint of published range", 7_600),
+                          ("Analyst high", 12_700)])
+
+    def test_other_operating_held_constant(self):
+        # Operating campaign total 7,760 minus childcare 5,900.
+        self.assertTrue(all(r["other_operating_$M"] == 1_860
+                            for r in self.rows))
+        totals = {r["childcare_case"]: r["total_operating_$M"]
+                  for r in self.rows}
+        self.assertEqual(totals["Analyst low"], 4_360)
+        self.assertEqual(totals["Campaign figure"], 7_760)
+        self.assertEqual(totals["Analyst high"], 14_560)
+
+    def test_breakeven_childcare_by_outcome(self):
+        breakevens = {}
+        for r in self.rows:
+            breakevens.setdefault(r["albany_outcome"],
+                                  r["breakeven_childcare_$M"])
+        self.assertEqual(breakevens["Both Albany taxes approved"], 8_140)
+        self.assertEqual(breakevens["Corp tax only"], 4_140)
+        self.assertEqual(breakevens["Income tax only"], 3_140)
+        # Negative: city-controlled revenue cannot cover even the
+        # non-childcare operating pledges ($1,860M vs $1,000M).
+        self.assertEqual(breakevens["Neither Albany tax approved"], -860)
+
+    def test_only_five_combinations_cover(self):
+        covering = {(r["albany_outcome"], r["childcare_case"])
+                    for r in self.rows if r["covers_operating"] == "Yes"}
+        self.assertEqual(covering, {
+            ("Both Albany taxes approved", "Analyst low"),
+            ("Both Albany taxes approved", "Campaign figure"),
+            ("Both Albany taxes approved", "Midpoint of published range"),
+            ("Corp tax only", "Analyst low"),
+            ("Income tax only", "Analyst low"),
+        })
+
+    def test_spot_cells(self):
+        corp_mid = next(r for r in self.rows
+                        if r["albany_outcome"] == "Corp tax only"
+                        and r["childcare_case"] == "Midpoint of published range")
+        self.assertEqual(corp_mid["coverage_%"], 63.4)
+        self.assertEqual(corp_mid["gap_$M"], -3_460)
+        neither_low = self.rows[-4]  # first Neither-tax row: analyst low
+        self.assertEqual(neither_low["childcare_case"], "Analyst low")
+        self.assertEqual(neither_low["coverage_%"], 22.9)
+
+    def test_coverage_falls_as_childcare_cost_rises(self):
+        for label, _ in bm.albany_outcome_totals():
+            covs = [r["coverage_%"] for r in self.rows
+                    if r["albany_outcome"] == label]
+            self.assertEqual(covs, sorted(covs, reverse=True))
 
 
 if __name__ == "__main__":

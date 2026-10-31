@@ -124,6 +124,61 @@ def joint_sensitivity_rows(realization_cases=(100, 75, 50, 25)):
     return rows
 
 
+def childcare_case_list():
+    """(label, childcare cost $M) across the full published range.
+
+    Same four cases as the v4 sensitivity: analyst low ($2.5B, SOURCES.md),
+    the campaign figure, the midpoint of the published range, and the
+    analyst high.
+    """
+    childcare = next(p for p in PLEDGES if p[0].startswith("Universal childcare"))
+    return [
+        ("Analyst low", 2_500),
+        ("Campaign figure", childcare[1]),
+        ("Midpoint of published range", (2_500 + childcare[2]) // 2),
+        ("Analyst high", childcare[2]),
+    ]
+
+
+def childcare_albany_rows():
+    """Childcare cost x Albany outcome grid, operating-only costs.
+
+    v4 varied childcare against the full pledged revenue and v3 varied
+    Albany approval at campaign-figure costs; cross them: each childcare
+    case's total operating cost (other operating pledges held at campaign
+    figures) against each Albany outcome's revenue total. The break-even
+    childcare cost for an outcome is its revenue minus the other operating
+    pledges -- it can go negative, meaning that outcome cannot cover even
+    the non-childcare operating pledges on its own.
+    """
+    op_low, _ = annual_costs(kind="operating")
+    childcare = next(p for p in PLEDGES if p[0].startswith("Universal childcare"))
+    other_operating = op_low - childcare[1]
+    rows = []
+    for label, total_rev in albany_outcome_totals():
+        breakeven = total_rev - other_operating
+        for case_label, cc_cost in childcare_case_list():
+            total_op = other_operating + cc_cost
+            rows.append({
+                "albany_outcome": label,
+                "total_revenue_$M": total_rev,
+                "childcare_case": case_label,
+                "childcare_cost_$M": cc_cost,
+                "other_operating_$M": other_operating,
+                "total_operating_$M": total_op,
+                "coverage_%": round(total_rev / total_op * 100, 1),
+                "gap_$M": total_rev - total_op,
+                "covers_operating": "Yes" if total_rev >= total_op else "No",
+                "breakeven_childcare_$M": breakeven,
+                "note": (f"Break-even childcare cost for this Albany outcome "
+                         f"is ${breakeven/1000:.2f}B"
+                         + (" (negative: this revenue cannot cover even the "
+                            "non-childcare operating pledges)."
+                            if breakeven < 0 else ".")),
+            })
+    return rows
+
+
 def main():
     cost_low, cost_high = annual_costs()
     revenue = proposed_revenue()
@@ -284,6 +339,20 @@ def main():
     joint_covering = [r for r in joint_rows
                       if r["covers_operating_low"] == "Yes"]
 
+    # ---- v7 cut: childcare cost x Albany outcome sensitivity ----
+    # v6 crossed the two revenue risks; this crosses the biggest cost
+    # risk (childcare's $2.5B-$12.7B range) against the revenue risk
+    # (Albany approval). A partial Albany win that looks workable at
+    # campaign-figure childcare may fail at the midpoint of the range.
+    cc_albany_rows = childcare_albany_rows()
+    cc_albany_path = os.path.join(HERE, "childcare_albany.csv")
+    with open(cc_albany_path, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=list(cc_albany_rows[0].keys()))
+        w.writeheader()
+        w.writerows(cc_albany_rows)
+    cc_albany_covering = [r for r in cc_albany_rows
+                          if r["covers_operating"] == "Yes"]
+
     fig5, ax5 = plt.subplots(figsize=(8, 3.8))
     rev_labels = [f"{r['realization_%']}%" for r in revenue_rows]
     rev_vals = [r["realized_revenue_$M"] / 1000 for r in revenue_rows]
@@ -331,6 +400,33 @@ def main():
     fig6.tight_layout()
     fig6.savefig(os.path.join(HERE, "results_joint.png"), dpi=120)
     plt.close(fig6)
+
+    # Heatmap of the childcare x Albany grid: coverage (%) of total
+    # operating costs by Albany outcome (rows) x childcare case (columns).
+    cc_case_labels = [label for label, _ in childcare_case_list()]
+    cc_grid = [[next(r["coverage_%"] for r in cc_albany_rows
+                     if r["albany_outcome"] == label
+                     and r["childcare_case"] == case)
+                for case in cc_case_labels]
+               for label in outcome_labels]
+    fig7, ax7 = plt.subplots(figsize=(8, 4.2))
+    im7 = ax7.imshow(cc_grid, cmap="RdYlGn", vmin=0, vmax=230)
+    ax7.set_xticks(range(len(cc_case_labels)))
+    ax7.set_xticklabels([f"{label}\n(${cost/1000:.1f}B)"
+                         for label, cost in childcare_case_list()], fontsize=9)
+    ax7.set_yticks(range(len(outcome_labels)))
+    ax7.set_yticklabels([label.replace(" approved", "")
+                         for label in outcome_labels], fontsize=9)
+    for i, row in enumerate(cc_grid):
+        for j, v in enumerate(row):
+            ax7.text(j, i, f"{v:.1f}%", ha="center", va="center",
+                     fontsize=10, color="black" if v < 200 else "white")
+    ax7.set_title("Coverage of operating costs by Albany outcome\n"
+                  "and childcare cost case (other pledges at campaign figures)")
+    fig7.colorbar(im7, ax=ax7, label="Coverage (%)")
+    fig7.tight_layout()
+    fig7.savefig(os.path.join(HERE, "results_childcare_albany.png"), dpi=120)
+    plt.close(fig7)
 
     fig4, ax4 = plt.subplots(figsize=(8, 3.8))
     cc_labels = [r["childcare_case"] for r in childcare_rows]
@@ -520,11 +616,29 @@ def main():
           f"${joint_rows[-1]['realized_revenue_$M']/1000:.2f}B against "
           f"${op_low/1000:.1f}B of operating costs "
           f"({joint_rows[-1]['coverage_of_operating_low_%']:.1f}% coverage).")
+    print()
+    print("--- Childcare cost x Albany outcome sensitivity (operating-only) ---")
+    for label, total_rev in albany_outcome_totals():
+        cells = [r for r in cc_albany_rows if r["albany_outcome"] == label]
+        covers = ", ".join(
+            f"{r['childcare_case']} -> {r['coverage_%']:.1f}%"
+            for r in cells)
+        print(f"{label} (revenue ${total_rev/1000:.0f}B, break-even "
+              f"childcare ${cells[0]['breakeven_childcare_$M']/1000:.2f}B): "
+              f"{covers}")
+    print(f"Only {len(cc_albany_covering)} of {len(cc_albany_rows)} "
+          f"combinations cover operating costs. Partial Albany wins cover "
+          f"only at the analyst-low childcare cost, and with neither tax "
+          f"the break-even childcare cost is negative "
+          f"(${cc_albany_rows[-1]['breakeven_childcare_$M']/1000:.2f}B): "
+          f"city-controlled revenue cannot cover even the "
+          f"${other_operating/1000:.2f}B of non-childcare operating pledges.")
     print("Sources: SOURCES.md (results.csv, scenarios.csv, sensitivity.csv,")
     print("childcare_sensitivity.csv, revenue_sensitivity.csv,")
-    print("joint_sensitivity.csv, results.png, results_operating.png,")
-    print("results_sensitivity.png, results_childcare.png,")
-    print("results_revenue.png, results_joint.png written).")
+    print("joint_sensitivity.csv, childcare_albany.csv, results.png,")
+    print("results_operating.png, results_sensitivity.png,")
+    print("results_childcare.png, results_revenue.png, results_joint.png,")
+    print("results_childcare_albany.png written).")
 
 
 if __name__ == "__main__":
