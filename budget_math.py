@@ -179,6 +179,75 @@ def childcare_albany_rows():
     return rows
 
 
+HOUSING_CAPITAL_TOTAL = 100_000  # $100B over 10 years, then the plan is done
+
+
+def breakeven_horizon(high=False):
+    """Years until cumulative pledged revenue catches cumulative total
+    costs (operating pledges at campaign figures, or analyst high when
+    high=True), or None if it never does.
+
+    Every earlier cut is a single-year snapshot, but the pieces are not
+    all the same kind of number: operating pledges and pledged revenue
+    are recurring flows, while the housing plan is a finite $100B stock
+    spent over 10 years. While the capital plan runs, total costs exceed
+    revenue by $7.76B/yr on campaign figures even though operating costs
+    alone are covered; after year 10 the annual operating surplus
+    ($2.24B/yr) starts paying that down, and cumulative break-even
+    arrives at 100,000 / (10,000 - 7,760) = 44.6 years. At analyst-high
+    operating costs revenue never even covers the operating flows, so
+    there is no break-even.
+    """
+    op_low, op_high = annual_costs(kind="operating")
+    op = op_high if high else op_low
+    surplus = proposed_revenue() - op
+    if surplus <= 0:
+        return None
+    return round(HOUSING_CAPITAL_TOTAL / surplus, 1)
+
+
+def term_rows(horizons=(1, 4, 10, 20, 50)):
+    """Cumulative costs and revenue over multi-year horizons.
+
+    Capital is capped at the $100B plan total (its $10B/yr run rate
+    stops after year 10); operating costs and pledged revenue recur
+    every year. Coverage of total costs is flat at the single-year
+    figure while capital runs, then rises as the finished capital
+    stock is spread over more years of revenue.
+    """
+    op_low, op_high = annual_costs(kind="operating")
+    revenue = proposed_revenue()
+    revenue_city = proposed_revenue(albany_required=False)
+    capital_rate = next(p[1] for p in PLEDGES if p[3] == "capital")
+    rows = []
+    for years in horizons:
+        capital = min(capital_rate * years, HOUSING_CAPITAL_TOTAL)
+        total_low = op_low * years + capital
+        total_high = op_high * years + capital
+        cum_rev = revenue * years
+        rows.append({
+            "horizon_years": years,
+            "cumulative_operating_low_$M": op_low * years,
+            "cumulative_operating_high_$M": op_high * years,
+            "cumulative_capital_$M": capital,
+            "cumulative_total_low_$M": total_low,
+            "cumulative_total_high_$M": total_high,
+            "cumulative_pledged_revenue_$M": cum_rev,
+            "cumulative_city_only_revenue_$M": revenue_city * years,
+            "coverage_of_total_low_%": round(cum_rev / total_low * 100, 1),
+            "coverage_of_total_high_%": round(cum_rev / total_high * 100, 1),
+            "cumulative_gap_vs_total_low_$M": cum_rev - total_low,
+            "breakeven_horizon_low_years": breakeven_horizon(),
+            "breakeven_horizon_high_years": breakeven_horizon(high=True),
+            "note": ("Capital is the finite $100B/10-yr housing plan "
+                     "(capped at $100B); operating costs and pledged "
+                     "revenue recur annually. Break-even horizon at "
+                     "campaign figures is 44.6 years; at analyst-high "
+                     "operating costs there is none."),
+        })
+    return rows
+
+
 def main():
     cost_low, cost_high = annual_costs()
     revenue = proposed_revenue()
@@ -353,6 +422,20 @@ def main():
     cc_albany_covering = [r for r in cc_albany_rows
                           if r["covers_operating"] == "Yes"]
 
+    # ---- v8 cut: multi-year horizon (cumulative) ----
+    # Every earlier cut is one year. Cumulate: operating costs and
+    # revenue recur, but the housing plan is a finite $100B stock that
+    # finishes after year 10, so the cumulative picture changes with
+    # the horizon even though each single year looks the same.
+    horizon_rows = term_rows()
+    horizon_path = os.path.join(HERE, "horizon.csv")
+    with open(horizon_path, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=list(horizon_rows[0].keys()))
+        w.writeheader()
+        w.writerows(horizon_rows)
+    be_low = breakeven_horizon()
+    be_high = breakeven_horizon(high=True)
+
     fig5, ax5 = plt.subplots(figsize=(8, 3.8))
     rev_labels = [f"{r['realization_%']}%" for r in revenue_rows]
     rev_vals = [r["realized_revenue_$M"] / 1000 for r in revenue_rows]
@@ -427,6 +510,40 @@ def main():
     fig7.tight_layout()
     fig7.savefig(os.path.join(HERE, "results_childcare_albany.png"), dpi=120)
     plt.close(fig7)
+
+    # Cumulative lines over 50 years: total costs (campaign and analyst
+    # high) vs pledged revenue. The cost lines kink at year 10 when the
+    # $100B housing plan finishes; the campaign line then converges on
+    # revenue and crosses it at the 44.6-year break-even.
+    years_x = list(range(0, 51))
+    cap_series = [min(10_000 * y, HOUSING_CAPITAL_TOTAL) / 1000
+                  for y in years_x]
+    cum_cost_low = [(op_low * y) / 1000 + c
+                    for y, c in zip(years_x, cap_series)]
+    cum_cost_high = [(op_high * y) / 1000 + c
+                     for y, c in zip(years_x, cap_series)]
+    cum_rev_line = [revenue * y / 1000 for y in years_x]
+    fig8, ax8 = plt.subplots(figsize=(8, 4.2))
+    ax8.plot(years_x, cum_rev_line, color="#1f4e79", linewidth=2,
+             label="Cumulative pledged revenue ($10B/yr)")
+    ax8.plot(years_x, cum_cost_low, color="#b00020", linewidth=2,
+             label="Cumulative total costs, campaign figures")
+    ax8.plot(years_x, cum_cost_high, color="#7fa8c9", linewidth=2,
+             label="Cumulative total costs, analyst high")
+    ax8.axvline(10, color="gray", linestyle=":", linewidth=1.2)
+    ax8.annotate("Housing plan complete\n(year 10)", (10, 60),
+                 fontsize=8, color="gray")
+    ax8.annotate(f"Break-even: year {be_low:.1f}", (be_low, revenue * be_low / 1000),
+                 textcoords="offset points", xytext=(-92, 14), fontsize=9,
+                 color="#b00020")
+    ax8.set_xlabel("Years")
+    ax8.set_ylabel("Cumulative $B")
+    ax8.set_title("Cumulative pledged revenue vs total pledge costs\n"
+                  "(capital plan finishes at year 10; operating flows recur)")
+    ax8.legend(loc="upper left", fontsize=8)
+    fig8.tight_layout()
+    fig8.savefig(os.path.join(HERE, "results_horizon.png"), dpi=120)
+    plt.close(fig8)
 
     fig4, ax4 = plt.subplots(figsize=(8, 3.8))
     cc_labels = [r["childcare_case"] for r in childcare_rows]
@@ -633,12 +750,31 @@ def main():
           f"(${cc_albany_rows[-1]['breakeven_childcare_$M']/1000:.2f}B): "
           f"city-controlled revenue cannot cover even the "
           f"${other_operating/1000:.2f}B of non-childcare operating pledges.")
+    print()
+    print("--- Multi-year horizon (cumulative; capital capped at $100B) ---")
+    for r in horizon_rows:
+        print(f"{r['horizon_years']:>2} yrs: total costs "
+              f"${r['cumulative_total_low_$M']/1000:.1f}B-"
+              f"${r['cumulative_total_high_$M']/1000:.1f}B vs pledged "
+              f"revenue ${r['cumulative_pledged_revenue_$M']/1000:.1f}B "
+              f"(covers {r['coverage_of_total_low_%']:.1f}% at campaign "
+              f"figures; cumulative gap "
+              f"${r['cumulative_gap_vs_total_low_$M']/1000:.1f}B)")
+    print(f"Break-even horizon: cumulative revenue catches cumulative "
+          f"total costs only in year {be_low:.1f} on campaign figures -- "
+          f"the cumulative gap peaks at $77.6B in year 10 when the "
+          f"housing plan finishes, then the $2.2B/yr operating surplus "
+          f"pays it down. At analyst-high operating costs there is no "
+          f"break-even horizon (revenue never covers even the "
+          f"operating flows, so the gap grows every year). City-only "
+          f"revenue never covers cumulative operating costs at any "
+          f"horizon ($10.0B over 10 years vs $77.6B).")
     print("Sources: SOURCES.md (results.csv, scenarios.csv, sensitivity.csv,")
     print("childcare_sensitivity.csv, revenue_sensitivity.csv,")
-    print("joint_sensitivity.csv, childcare_albany.csv, results.png,")
-    print("results_operating.png, results_sensitivity.png,")
+    print("joint_sensitivity.csv, childcare_albany.csv, horizon.csv,")
+    print("results.png, results_operating.png, results_sensitivity.png,")
     print("results_childcare.png, results_revenue.png, results_joint.png,")
-    print("results_childcare_albany.png written).")
+    print("results_childcare_albany.png, results_horizon.png written).")
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 """Unit tests for budget_math: sourced totals, the v6 joint grid,
-and the v7 childcare x Albany grid.
+the v7 childcare x Albany grid, and the v8 horizon cut.
 
 Run: python3 -m unittest test_budget_math -v
 """
@@ -147,6 +147,62 @@ class TestChildcareAlbany(unittest.TestCase):
             covs = [r["coverage_%"] for r in self.rows
                     if r["albany_outcome"] == label]
             self.assertEqual(covs, sorted(covs, reverse=True))
+
+
+class TestTermHorizon(unittest.TestCase):
+    def setUp(self):
+        self.rows = {r["horizon_years"]: r for r in bm.term_rows()}
+
+    def test_capital_capped_at_plan_total(self):
+        self.assertEqual(self.rows[4]["cumulative_capital_$M"], 40_000)
+        self.assertEqual(self.rows[10]["cumulative_capital_$M"], 100_000)
+        self.assertEqual(self.rows[20]["cumulative_capital_$M"], 100_000)
+        self.assertEqual(self.rows[50]["cumulative_capital_$M"], 100_000)
+
+    def test_cumulative_totals(self):
+        # 4 yrs: operating 7,760 x 4 + capital 40,000.
+        self.assertEqual(self.rows[4]["cumulative_total_low_$M"], 71_040)
+        self.assertEqual(self.rows[4]["cumulative_pledged_revenue_$M"],
+                         40_000)
+        # 10 yrs: operating 77,600 + the full 100,000 capital plan.
+        self.assertEqual(self.rows[10]["cumulative_total_low_$M"], 177_600)
+        self.assertEqual(self.rows[10]["cumulative_total_high_$M"], 246_600)
+        self.assertEqual(self.rows[10]["cumulative_gap_vs_total_low_$M"],
+                         -77_600)
+
+    def test_coverage_flat_while_capital_runs_then_rises(self):
+        self.assertEqual(self.rows[1]["coverage_of_total_low_%"], 56.3)
+        self.assertEqual(self.rows[10]["coverage_of_total_low_%"], 56.3)
+        self.assertEqual(self.rows[20]["coverage_of_total_low_%"], 78.4)
+        self.assertEqual(self.rows[50]["coverage_of_total_low_%"], 102.5)
+
+    def test_gap_peaks_at_year_10_then_shrinks(self):
+        gap10 = self.rows[10]["cumulative_gap_vs_total_low_$M"]
+        gap20 = self.rows[20]["cumulative_gap_vs_total_low_$M"]
+        gap50 = self.rows[50]["cumulative_gap_vs_total_low_$M"]
+        self.assertLess(gap10, gap20)
+        self.assertEqual(gap20, -55_200)
+        self.assertEqual(gap50, 12_000)
+
+    def test_breakeven_horizon(self):
+        # 100,000 / (10,000 - 7,760) = 44.64 -> 44.6 years.
+        self.assertEqual(bm.breakeven_horizon(), 44.6)
+        # Crossover falls between the year-44 and year-45 cumulative rows.
+        rows = {r["horizon_years"]: r
+                for r in bm.term_rows(horizons=(44, 45))}
+        self.assertEqual(rows[44]["cumulative_gap_vs_total_low_$M"], -1_440)
+        self.assertEqual(rows[45]["cumulative_gap_vs_total_low_$M"], 800)
+
+    def test_breakeven_horizon_none_at_analyst_high(self):
+        # Revenue 10,000 < analyst-high operating 14,660: never breaks even.
+        self.assertIsNone(bm.breakeven_horizon(high=True))
+        self.assertTrue(all(r["breakeven_horizon_high_years"] is None
+                            for r in self.rows.values()))
+
+    def test_city_only_revenue_never_covers_operating(self):
+        for r in self.rows.values():
+            self.assertLess(r["cumulative_city_only_revenue_$M"],
+                            r["cumulative_operating_low_$M"])
 
 
 if __name__ == "__main__":
