@@ -1,5 +1,6 @@
 """Unit tests for budget_math: sourced totals, the v6 joint grid,
-the v7 childcare x Albany grid, and the v8 horizon cut.
+the v7 childcare x Albany grid, the v8 horizon cut, and the v9
+per-household lens.
 
 Run: python3 -m unittest test_budget_math -v
 """
@@ -203,6 +204,70 @@ class TestTermHorizon(unittest.TestCase):
         for r in self.rows.values():
             self.assertLess(r["cumulative_city_only_revenue_$M"],
                             r["cumulative_operating_low_$M"])
+
+
+class TestPerHousehold(unittest.TestCase):
+    def setUp(self):
+        self.rows = bm.per_household_rows()
+        self.by_item = {r["item"]: r for r in self.rows}
+
+    def test_conversion(self):
+        # $3,100M over 3.1M households is exactly $1,000/household.
+        self.assertEqual(bm.dollars_per_household(3_100), 1000.0)
+        self.assertEqual(bm.dollars_per_household(0), 0.0)
+
+    def test_shape(self):
+        pledges = [r for r in self.rows if r["category"] == "pledge"]
+        self.assertEqual(len(pledges), 6)
+        self.assertEqual(len(self.rows), 11)  # 6 pledges + 5 aggregates
+
+    def test_childcare_mid_is_3000_and_93pct_of_revenue(self):
+        cc = next(r for r in self.rows
+                  if r["item"].startswith("Universal childcare"))
+        # Mid $9,300M / 3.1M households = exactly $3,000.
+        self.assertEqual(cc["mid_$_per_household"], 3000.0)
+        rev = self.by_item["Pledged revenue (total)"]["mid_$_per_household"]
+        self.assertEqual(rev, 3225.81)
+        self.assertEqual(round(cc["mid_$_per_household"] / rev * 100), 93)
+
+    def test_housing_equals_pledged_revenue_per_household(self):
+        housing = next(r for r in self.rows
+                       if r["item"].startswith("200k affordable"))
+        rev = self.by_item["Pledged revenue (total)"]["mid_$_per_household"]
+        self.assertEqual(housing["mid_$_per_household"], rev)
+
+    def test_operating_and_total_per_household(self):
+        op = self.by_item["Operating pledges (total)"]
+        self.assertEqual(op["low_$_per_household"], 2503.23)
+        self.assertEqual(op["high_$_per_household"], 4729.03)
+        total = self.by_item["All pledges (total)"]
+        self.assertEqual(total["low_$_per_household"], 5729.03)
+        self.assertEqual(total["high_$_per_household"], 7954.84)
+
+    def test_shortfall_per_household(self):
+        rev = self.by_item["Pledged revenue (total)"]["mid_$_per_household"]
+        total = self.by_item["All pledges (total)"]
+        self.assertEqual(round(total["low_$_per_household"] - rev, 2),
+                         2503.22)
+        self.assertEqual(round(total["high_$_per_household"] - rev, 2),
+                         4729.03)
+
+    def test_revenue_split_sums_to_total_within_rounding(self):
+        albany = self.by_item["Albany-dependent revenue"][
+            "mid_$_per_household"]
+        city = self.by_item["City-controlled revenue"][
+            "mid_$_per_household"]
+        rev = self.by_item["Pledged revenue (total)"]["mid_$_per_household"]
+        self.assertAlmostEqual(albany + city, rev, places=1)
+        self.assertEqual(city, 322.58)
+
+    def test_pledge_rows_sum_to_totals_within_rounding(self):
+        for col, kind in (("low_$_per_household", "low"),
+                          ("high_$_per_household", "high")):
+            pledge_sum = sum(r[col] for r in self.rows
+                             if r["category"] == "pledge")
+            total = self.by_item["All pledges (total)"][col]
+            self.assertAlmostEqual(pledge_sum, total, delta=0.05)
 
 
 if __name__ == "__main__":

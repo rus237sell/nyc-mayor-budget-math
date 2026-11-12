@@ -248,6 +248,59 @@ def term_rows(horizons=(1, 4, 10, 20, 50)):
     return rows
 
 
+def dollars_per_household(amount_m):
+    """$ per NYC household per year for an annual $M figure."""
+    return round(amount_m * 1e6 / NYC_HOUSEHOLDS, 2)
+
+
+def per_household_rows():
+    """Per-household lens: every pledge, total and revenue line in
+    $/household/yr (annual $M divided by ~3.1M households, SOURCES.md).
+
+    Every earlier cut works in $B, which hides the scale for a resident.
+    On this lens childcare alone (mid estimate $3,000/household) is 93%
+    of all pledged revenue per household ($3,226), the housing run rate
+    ($3,226) equals that revenue exactly, and city-controlled revenue
+    is just $323/household against $2,503 of campaign-figure operating
+    costs. Single-point lines (revenue, fixed-cost pledges) have
+    low == high == mid.
+    """
+    rows = []
+    for label, low, high, kind, _note in PLEDGES:
+        rows.append({
+            "item": label,
+            "category": "pledge",
+            "kind": kind,
+            "low_$_per_household": dollars_per_household(low),
+            "high_$_per_household": dollars_per_household(high),
+            "mid_$_per_household": dollars_per_household((low + high) / 2),
+        })
+    op_low, op_high = annual_costs(kind="operating")
+    cost_low, cost_high = annual_costs()
+    aggregates = [
+        ("Operating pledges (total)", "total", "operating", op_low, op_high),
+        ("All pledges (total)", "total", "all", cost_low, cost_high),
+        ("Pledged revenue (total)", "revenue", "all",
+         proposed_revenue(), proposed_revenue()),
+        ("Albany-dependent revenue", "revenue", "albany",
+         proposed_revenue(albany_required=True),
+         proposed_revenue(albany_required=True)),
+        ("City-controlled revenue", "revenue", "city",
+         proposed_revenue(albany_required=False),
+         proposed_revenue(albany_required=False)),
+    ]
+    for label, category, kind, low, high in aggregates:
+        rows.append({
+            "item": label,
+            "category": category,
+            "kind": kind,
+            "low_$_per_household": dollars_per_household(low),
+            "high_$_per_household": dollars_per_household(high),
+            "mid_$_per_household": dollars_per_household((low + high) / 2),
+        })
+    return rows
+
+
 def main():
     cost_low, cost_high = annual_costs()
     revenue = proposed_revenue()
@@ -436,6 +489,27 @@ def main():
     be_low = breakeven_horizon()
     be_high = breakeven_horizon(high=True)
 
+    # ---- v9 cut: per-household lens ----
+    # Every earlier cut is in $B. Divide pledges, totals and revenue by
+    # the ~3.1M NYC households (SOURCES.md) so the scale reads per
+    # resident household per year.
+    hh_rows = per_household_rows()
+    hh_path = os.path.join(HERE, "per_household.csv")
+    with open(hh_path, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=list(hh_rows[0].keys()))
+        w.writeheader()
+        w.writerows(hh_rows)
+    hh_by_item = {r["item"]: r for r in hh_rows}
+    rev_hh = hh_by_item["Pledged revenue (total)"]["mid_$_per_household"]
+    childcare_hh = next(r for r in hh_rows
+                        if r["item"].startswith("Universal childcare"))
+    housing_hh = next(r for r in hh_rows
+                      if r["item"].startswith("200k affordable"))
+    shortfall_low_hh = round(
+        hh_by_item["All pledges (total)"]["low_$_per_household"] - rev_hh, 2)
+    shortfall_high_hh = round(
+        hh_by_item["All pledges (total)"]["high_$_per_household"] - rev_hh, 2)
+
     fig5, ax5 = plt.subplots(figsize=(8, 3.8))
     rev_labels = [f"{r['realization_%']}%" for r in revenue_rows]
     rev_vals = [r["realized_revenue_$M"] / 1000 for r in revenue_rows]
@@ -544,6 +618,33 @@ def main():
     fig8.tight_layout()
     fig8.savefig(os.path.join(HERE, "results_horizon.png"), dpi=120)
     plt.close(fig8)
+
+    # Per-household range chart: pledge low-high in $/household vs the
+    # pledged-revenue line (also $/household).
+    pledge_hh = [r for r in hh_rows if r["category"] == "pledge"]
+    fig9, ax9 = plt.subplots(figsize=(9, 4.6))
+    y9 = range(len(pledge_hh))
+    ax9.barh(list(y9), [r["high_$_per_household"] for r in pledge_hh],
+             color="#c9c9c9", label="High estimate")
+    ax9.barh(list(y9), [r["low_$_per_household"] for r in pledge_hh],
+             color="#1f4e79", label="Campaign figure")
+    for i, r in enumerate(pledge_hh):
+        ax9.text(r["high_$_per_household"] + 90, i,
+                 f"${r['high_$_per_household']:,.0f}", va="center",
+                 ha="left", fontsize=9)
+    ax9.axvline(rev_hh, color="#b00020", linestyle="--", linewidth=1.5,
+                label=f"Pledged revenue: ${rev_hh:,.0f}/household")
+    ax9.set_xlim(0, max(r["high_$_per_household"] for r in pledge_hh) * 1.22)
+    ax9.set_yticks(list(y9))
+    ax9.set_yticklabels([r["item"].split(" (")[0] for r in pledge_hh],
+                        fontsize=10)
+    ax9.set_xlabel("Annual cost ($ per NYC household)")
+    ax9.set_title("Pledge costs per household vs pledged revenue per household\n"
+                  "(~3.1M households; estimates, not enacted spending)")
+    ax9.legend(loc="lower right", fontsize=9)
+    fig9.tight_layout()
+    fig9.savefig(os.path.join(HERE, "results_per_household.png"), dpi=120)
+    plt.close(fig9)
 
     fig4, ax4 = plt.subplots(figsize=(8, 3.8))
     cc_labels = [r["childcare_case"] for r in childcare_rows]
@@ -769,12 +870,33 @@ def main():
           f"operating flows, so the gap grows every year). City-only "
           f"revenue never covers cumulative operating costs at any "
           f"horizon ($10.0B over 10 years vs $77.6B).")
+    print()
+    print("--- Per-household lens (~3.1M households) ---")
+    for r in hh_rows:
+        print(f"{r['item']}: ${r['low_$_per_household']:,.2f}-"
+              f"${r['high_$_per_household']:,.2f}/household/yr "
+              f"(mid ${r['mid_$_per_household']:,.2f})")
+    print(f"Childcare alone at its mid estimate "
+          f"(${childcare_hh['mid_$_per_household']:,.0f}/household) is "
+          f"{childcare_hh['mid_$_per_household']/rev_hh*100:.0f}% of all "
+          f"pledged revenue per household (${rev_hh:,.0f}), and the "
+          f"housing run rate (${housing_hh['mid_$_per_household']:,.0f}) "
+          f"equals that revenue line exactly. The all-pledge shortfall "
+          f"is ${shortfall_low_hh:,.0f}/household/yr on campaign figures "
+          f"and ${shortfall_high_hh:,.0f} at analyst high; city-controlled "
+          f"revenue is just "
+          f"${hh_by_item['City-controlled revenue']['mid_$_per_household']:,.0f}"
+          f"/household against "
+          f"${hh_by_item['Operating pledges (total)']['low_$_per_household']:,.0f} "
+          f"of campaign-figure operating costs.")
     print("Sources: SOURCES.md (results.csv, scenarios.csv, sensitivity.csv,")
     print("childcare_sensitivity.csv, revenue_sensitivity.csv,")
     print("joint_sensitivity.csv, childcare_albany.csv, horizon.csv,")
-    print("results.png, results_operating.png, results_sensitivity.png,")
+    print("per_household.csv, results.png, results_operating.png,")
+    print("results_sensitivity.png,")
     print("results_childcare.png, results_revenue.png, results_joint.png,")
-    print("results_childcare_albany.png, results_horizon.png written).")
+    print("results_childcare_albany.png, results_horizon.png,")
+    print("results_per_household.png written).")
 
 
 if __name__ == "__main__":
