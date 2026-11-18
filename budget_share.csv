@@ -1,0 +1,13 @@
+item,category,kind,low_$M,high_$M,mid_$M,low_share_of_FY27_budget_%,high_share_of_FY27_budget_%,mid_share_of_FY27_budget_%,mid_multiple_of_FY27_gap
+Fare-free buses,pledge,operating,700,800,750.0,0.56,0.64,0.6,0.14
+Universal childcare (6wk-5yr),pledge,operating,5900,12700,9300.0,4.69,10.1,7.39,1.72
+City-owned grocery stores,pledge,operating,60,60,60.0,0.05,0.05,0.05,0.01
+Dept. of Community Safety,pledge,operating,1100,1100,1100.0,0.87,0.87,0.87,0.2
+Rent freeze (rent-stabilized),pledge,none,0,0,0.0,0.0,0.0,0.0,0.0
+200k affordable units / 10 yrs,pledge,capital,10000,10000,10000.0,7.95,7.95,7.95,1.85
+Operating pledges (total),total,operating,7760,14660,11210.0,6.17,11.65,8.91,2.08
+All pledges (total),total,all,17760,24660,21210.0,14.12,19.6,16.86,3.93
+All-pledge shortfall vs pledged revenue,shortfall,all,7760,14660,11210.0,6.17,11.65,8.91,2.08
+Pledged revenue (total),revenue,all,10000,10000,10000.0,7.95,7.95,7.95,1.85
+Albany-dependent revenue,revenue,albany,9000,9000,9000.0,7.15,7.15,7.15,1.67
+City-controlled revenue,revenue,city,1000,1000,1000.0,0.79,0.79,0.79,0.19

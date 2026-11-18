@@ -301,6 +301,80 @@ def per_household_rows():
     return rows
 
 
+def share_of_budget(amount_m):
+    """Percent of the enacted FY2027 budget ($125.8B) for a $M figure."""
+    return round(amount_m / ADOPTED_BUDGET_FY27 * 100, 2)
+
+
+def gap_multiple(amount_m):
+    """Multiple of the $5.4B FY27 gap the city just closed, for a $M figure."""
+    return round(amount_m / FY27_GAP_BEFORE_CLOSING, 2)
+
+
+def budget_share_rows():
+    """Budget-share lens: every pledge, total, shortfall and revenue
+    line as a share of the enacted FY2027 budget, plus its mid estimate
+    as a multiple of the $5.4B gap that budget had to close.
+
+    Earlier cuts work in $B or $/household; neither says how big the
+    pledges are next to the budget they would land in. On this lens
+    all pledges at mid estimates are 16.86% of the $125.8B budget
+    (14.12% at campaign figures, 19.60% at analyst high), pledged
+    revenue is just 7.95%, and the housing run rate alone (7.95%)
+    equals that entire revenue share. The campaign-figure shortfall
+    ($7.76B) is 6.17% of the budget and 1.44x the $5.4B gap the
+    enacted budget just closed; at analyst high it is 11.65% and
+    2.71x that gap. Childcare's high estimate alone (10.10%) exceeds
+    the whole pledged-revenue share.
+    """
+    rows = []
+    for label, low, high, kind, _note in PLEDGES:
+        mid = (low + high) / 2
+        rows.append({
+            "item": label,
+            "category": "pledge",
+            "kind": kind,
+            "low_$M": low,
+            "high_$M": high,
+            "mid_$M": mid,
+            "low_share_of_FY27_budget_%": share_of_budget(low),
+            "high_share_of_FY27_budget_%": share_of_budget(high),
+            "mid_share_of_FY27_budget_%": share_of_budget(mid),
+            "mid_multiple_of_FY27_gap": gap_multiple(mid),
+        })
+    op_low, op_high = annual_costs(kind="operating")
+    cost_low, cost_high = annual_costs()
+    revenue = proposed_revenue()
+    aggregates = [
+        ("Operating pledges (total)", "total", "operating", op_low, op_high),
+        ("All pledges (total)", "total", "all", cost_low, cost_high),
+        ("All-pledge shortfall vs pledged revenue", "shortfall", "all",
+         cost_low - revenue, cost_high - revenue),
+        ("Pledged revenue (total)", "revenue", "all", revenue, revenue),
+        ("Albany-dependent revenue", "revenue", "albany",
+         proposed_revenue(albany_required=True),
+         proposed_revenue(albany_required=True)),
+        ("City-controlled revenue", "revenue", "city",
+         proposed_revenue(albany_required=False),
+         proposed_revenue(albany_required=False)),
+    ]
+    for label, category, kind, low, high in aggregates:
+        mid = (low + high) / 2
+        rows.append({
+            "item": label,
+            "category": category,
+            "kind": kind,
+            "low_$M": low,
+            "high_$M": high,
+            "mid_$M": mid,
+            "low_share_of_FY27_budget_%": share_of_budget(low),
+            "high_share_of_FY27_budget_%": share_of_budget(high),
+            "mid_share_of_FY27_budget_%": share_of_budget(mid),
+            "mid_multiple_of_FY27_gap": gap_multiple(mid),
+        })
+    return rows
+
+
 def main():
     cost_low, cost_high = annual_costs()
     revenue = proposed_revenue()
@@ -510,6 +584,22 @@ def main():
     shortfall_high_hh = round(
         hh_by_item["All pledges (total)"]["high_$_per_household"] - rev_hh, 2)
 
+    # ---- v10 cut: budget-share lens ----
+    # Every earlier cut is in $B or $/household. Scale pledges, totals,
+    # the shortfall and revenue against the enacted $125.8B FY2027
+    # budget they would land in, and against the $5.4B gap that budget
+    # had to close.
+    bs_rows = budget_share_rows()
+    bs_path = os.path.join(HERE, "budget_share.csv")
+    with open(bs_path, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=list(bs_rows[0].keys()))
+        w.writeheader()
+        w.writerows(bs_rows)
+    bs_by_item = {r["item"]: r for r in bs_rows}
+    rev_share = bs_by_item["Pledged revenue (total)"][
+        "mid_share_of_FY27_budget_%"]
+    gap_share = share_of_budget(FY27_GAP_BEFORE_CLOSING)
+
     fig5, ax5 = plt.subplots(figsize=(8, 3.8))
     rev_labels = [f"{r['realization_%']}%" for r in revenue_rows]
     rev_vals = [r["realized_revenue_$M"] / 1000 for r in revenue_rows]
@@ -645,6 +735,38 @@ def main():
     fig9.tight_layout()
     fig9.savefig(os.path.join(HERE, "results_per_household.png"), dpi=120)
     plt.close(fig9)
+
+    # Budget-share chart: pledge low-high ranges as % of the FY27
+    # budget, against the pledged-revenue share and the closed gap.
+    pledge_bs = [r for r in bs_rows if r["category"] == "pledge"]
+    fig10, ax10 = plt.subplots(figsize=(9, 4.6))
+    y10 = range(len(pledge_bs))
+    ax10.barh(list(y10),
+              [r["high_share_of_FY27_budget_%"] for r in pledge_bs],
+              color="#c9c9c9", label="High estimate")
+    ax10.barh(list(y10),
+              [r["low_share_of_FY27_budget_%"] for r in pledge_bs],
+              color="#1f4e79", label="Campaign figure")
+    for i, r in enumerate(pledge_bs):
+        ax10.text(r["high_share_of_FY27_budget_%"] + 0.25, i,
+                  f"{r['high_share_of_FY27_budget_%']:.2f}%", va="center",
+                  ha="left", fontsize=9)
+    ax10.axvline(rev_share, color="#b00020", linestyle="--", linewidth=1.5,
+                 label=f"Pledged revenue: {rev_share:.2f}% of budget")
+    ax10.axvline(gap_share, color="#555555", linestyle=":", linewidth=1.5,
+                 label=f"FY27 gap just closed: {gap_share:.2f}% of budget")
+    ax10.set_xlim(0, max(r["high_share_of_FY27_budget_%"]
+                         for r in pledge_bs) * 1.22)
+    ax10.set_yticks(list(y10))
+    ax10.set_yticklabels([r["item"].split(" (")[0] for r in pledge_bs],
+                         fontsize=10)
+    ax10.set_xlabel("Annual cost (% of enacted FY2027 budget, $125.8B)")
+    ax10.set_title("Pledge costs as a share of the FY2027 budget\n"
+                   "(estimates, not enacted spending)")
+    ax10.legend(loc="lower right", fontsize=9)
+    fig10.tight_layout()
+    fig10.savefig(os.path.join(HERE, "results_budget_share.png"), dpi=120)
+    plt.close(fig10)
 
     fig4, ax4 = plt.subplots(figsize=(8, 3.8))
     cc_labels = [r["childcare_case"] for r in childcare_rows]
@@ -889,14 +1011,32 @@ def main():
           f"/household against "
           f"${hh_by_item['Operating pledges (total)']['low_$_per_household']:,.0f} "
           f"of campaign-figure operating costs.")
+    print()
+    print("--- Budget-share lens (enacted FY27 budget $125.8B; gap $5.4B) ---")
+    for r in bs_rows:
+        print(f"{r['item']}: {r['low_share_of_FY27_budget_%']:.2f}%-"
+              f"{r['high_share_of_FY27_budget_%']:.2f}% of FY27 budget "
+              f"(mid {r['mid_share_of_FY27_budget_%']:.2f}%, "
+              f"{r['mid_multiple_of_FY27_gap']:.2f}x the FY27 gap)")
+    print(f"All pledges at mid estimates are "
+          f"{bs_by_item['All pledges (total)']['mid_share_of_FY27_budget_%']:.2f}% "
+          f"of the budget against pledged revenue at {rev_share:.2f}%; the "
+          f"housing run rate alone ({bs_by_item['200k affordable units / 10 yrs']['mid_share_of_FY27_budget_%']:.2f}%) "
+          f"equals that entire revenue share, and childcare at analyst "
+          f"high ({bs_by_item['Universal childcare (6wk-5yr)']['high_share_of_FY27_budget_%']:.2f}%) "
+          f"exceeds it. The campaign-figure shortfall is "
+          f"{bs_by_item['All-pledge shortfall vs pledged revenue']['low_share_of_FY27_budget_%']:.2f}% "
+          f"of the budget, "
+          f"{gap_multiple(bs_by_item['All-pledge shortfall vs pledged revenue']['low_$M']):.2f}x "
+          f"the $5.4B gap the enacted budget just closed.")
     print("Sources: SOURCES.md (results.csv, scenarios.csv, sensitivity.csv,")
     print("childcare_sensitivity.csv, revenue_sensitivity.csv,")
     print("joint_sensitivity.csv, childcare_albany.csv, horizon.csv,")
-    print("per_household.csv, results.png, results_operating.png,")
+    print("per_household.csv, budget_share.csv, results.png, results_operating.png,")
     print("results_sensitivity.png,")
     print("results_childcare.png, results_revenue.png, results_joint.png,")
     print("results_childcare_albany.png, results_horizon.png,")
-    print("results_per_household.png written).")
+    print("results_per_household.png, results_budget_share.png written).")
 
 
 if __name__ == "__main__":

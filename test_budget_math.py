@@ -1,6 +1,6 @@
 """Unit tests for budget_math: sourced totals, the v6 joint grid,
-the v7 childcare x Albany grid, the v8 horizon cut, and the v9
-per-household lens.
+the v7 childcare x Albany grid, the v8 horizon cut, the v9
+per-household lens, and the v10 budget-share lens.
 
 Run: python3 -m unittest test_budget_math -v
 """
@@ -264,6 +264,77 @@ class TestPerHousehold(unittest.TestCase):
     def test_pledge_rows_sum_to_totals_within_rounding(self):
         for col, kind in (("low_$_per_household", "low"),
                           ("high_$_per_household", "high")):
+            pledge_sum = sum(r[col] for r in self.rows
+                             if r["category"] == "pledge")
+            total = self.by_item["All pledges (total)"][col]
+            self.assertAlmostEqual(pledge_sum, total, delta=0.05)
+
+
+class TestBudgetShare(unittest.TestCase):
+    def setUp(self):
+        self.rows = bm.budget_share_rows()
+        self.by_item = {r["item"]: r for r in self.rows}
+
+    def test_conversions(self):
+        # $12,580M is exactly 10% of the $125,800M budget; $5,400M
+        # is exactly 1.0x the FY27 gap.
+        self.assertEqual(bm.share_of_budget(12_580), 10.0)
+        self.assertEqual(bm.share_of_budget(0), 0.0)
+        self.assertEqual(bm.gap_multiple(5_400), 1.0)
+        self.assertEqual(bm.gap_multiple(2_700), 0.5)
+
+    def test_shape(self):
+        pledges = [r for r in self.rows if r["category"] == "pledge"]
+        self.assertEqual(len(pledges), 6)
+        self.assertEqual(len(self.rows), 12)  # 6 pledges + 6 aggregates
+
+    def test_total_and_operating_shares(self):
+        total = self.by_item["All pledges (total)"]
+        self.assertEqual(total["low_share_of_FY27_budget_%"], 14.12)
+        self.assertEqual(total["high_share_of_FY27_budget_%"], 19.6)
+        self.assertEqual(total["mid_share_of_FY27_budget_%"], 16.86)
+        op = self.by_item["Operating pledges (total)"]
+        self.assertEqual(op["low_share_of_FY27_budget_%"], 6.17)
+        self.assertEqual(op["high_share_of_FY27_budget_%"], 11.65)
+
+    def test_revenue_share_and_housing_equality(self):
+        rev = self.by_item["Pledged revenue (total)"]
+        self.assertEqual(rev["mid_share_of_FY27_budget_%"], 7.95)
+        housing = self.by_item["200k affordable units / 10 yrs"]
+        self.assertEqual(housing["mid_share_of_FY27_budget_%"],
+                         rev["mid_share_of_FY27_budget_%"])
+
+    def test_childcare_high_exceeds_revenue_share(self):
+        cc = self.by_item["Universal childcare (6wk-5yr)"]
+        self.assertEqual(cc["low_share_of_FY27_budget_%"], 4.69)
+        self.assertEqual(cc["high_share_of_FY27_budget_%"], 10.1)
+        self.assertEqual(cc["mid_share_of_FY27_budget_%"], 7.39)
+        rev = self.by_item["Pledged revenue (total)"]
+        self.assertGreater(cc["high_share_of_FY27_budget_%"],
+                           rev["mid_share_of_FY27_budget_%"])
+
+    def test_shortfall_shares_and_gap_multiples(self):
+        shortfall = self.by_item[
+            "All-pledge shortfall vs pledged revenue"]
+        self.assertEqual(shortfall["low_$M"], 7_760)
+        self.assertEqual(shortfall["high_$M"], 14_660)
+        self.assertEqual(shortfall["low_share_of_FY27_budget_%"], 6.17)
+        self.assertEqual(shortfall["high_share_of_FY27_budget_%"], 11.65)
+        self.assertEqual(bm.gap_multiple(shortfall["low_$M"]), 1.44)
+        self.assertEqual(bm.gap_multiple(shortfall["high_$M"]), 2.71)
+
+    def test_gap_multiples(self):
+        total = self.by_item["All pledges (total)"]
+        self.assertEqual(total["mid_multiple_of_FY27_gap"], 3.93)
+        rev = self.by_item["Pledged revenue (total)"]
+        self.assertEqual(rev["mid_multiple_of_FY27_gap"], 1.85)
+        city = self.by_item["City-controlled revenue"]
+        self.assertEqual(city["mid_share_of_FY27_budget_%"], 0.79)
+        self.assertEqual(city["mid_multiple_of_FY27_gap"], 0.19)
+
+    def test_pledge_shares_sum_to_total_within_rounding(self):
+        for col in ("low_share_of_FY27_budget_%",
+                    "high_share_of_FY27_budget_%"):
             pledge_sum = sum(r[col] for r in self.rows
                              if r["category"] == "pledge")
             total = self.by_item["All pledges (total)"][col]
