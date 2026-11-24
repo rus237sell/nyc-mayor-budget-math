@@ -1,6 +1,7 @@
 """Unit tests for budget_math: sourced totals, the v6 joint grid,
 the v7 childcare x Albany grid, the v8 horizon cut, the v9
-per-household lens, and the v10 budget-share lens.
+per-household lens, the v10 budget-share lens, and the v11
+concentration / uncertainty-attribution lens.
 
 Run: python3 -m unittest test_budget_math -v
 """
@@ -339,6 +340,62 @@ class TestBudgetShare(unittest.TestCase):
                              if r["category"] == "pledge")
             total = self.by_item["All pledges (total)"][col]
             self.assertAlmostEqual(pledge_sum, total, delta=0.05)
+
+
+class TestConcentration(unittest.TestCase):
+    def setUp(self):
+        self.rows = bm.concentration_rows()
+        self.by_item = {r["item"]: r for r in self.rows}
+        self.summary = bm.concentration_summary()
+
+    def test_shape(self):
+        self.assertEqual(len(self.rows), 6)
+
+    def test_childcare_operating_shares(self):
+        cc = self.by_item["Universal childcare (6wk-5yr)"]
+        self.assertEqual(cc["share_of_operating_low_%"], 76.03)
+        self.assertEqual(cc["share_of_operating_high_%"], 86.63)
+        self.assertEqual(cc["share_of_operating_mid_%"], 82.96)
+        self.assertEqual(cc["share_of_all_mid_%"], 43.85)
+
+    def test_childcare_owns_the_swing(self):
+        cc = self.by_item["Universal childcare (6wk-5yr)"]
+        self.assertEqual(cc["swing_$M"], 6_800)
+        self.assertEqual(cc["swing_share_of_operating_range_%"], 98.55)
+        self.assertEqual(cc["swing_share_of_total_range_%"], 98.55)
+        buses = self.by_item["Fare-free buses"]
+        self.assertEqual(buses["swing_share_of_operating_range_%"], 1.45)
+
+    def test_swing_shares_sum_to_100(self):
+        total = sum(r["swing_share_of_operating_range_%"] for r in self.rows)
+        self.assertAlmostEqual(total, 100.0, delta=0.02)
+        self.assertEqual(self.summary["pledges_with_a_published_range"], 2)
+
+    def test_operating_shares_sum_to_100_and_nonoperating_is_none(self):
+        op = [r for r in self.rows if r["kind"] == "operating"]
+        self.assertAlmostEqual(
+            sum(r["share_of_operating_mid_%"] for r in op), 100.0, delta=0.02)
+        housing = self.by_item["200k affordable units / 10 yrs"]
+        self.assertIsNone(housing["share_of_operating_mid_%"])
+        self.assertEqual(housing["share_of_all_mid_%"], 47.15)
+
+    def test_all_shares_sum_to_100(self):
+        self.assertAlmostEqual(
+            sum(r["share_of_all_mid_%"] for r in self.rows), 100.0, delta=0.02)
+
+    def test_hhi_and_top_shares(self):
+        self.assertEqual(self.summary["operating_hhi_mid"], 7024.0)
+        self.assertEqual(self.summary["all_hhi_mid"], 4185.0)
+        self.assertEqual(self.summary["operating_top1_share_%"], 82.96)
+        self.assertEqual(self.summary["operating_top2_share_%"], 92.77)
+        self.assertEqual(self.summary["all_top1_share_%"], 47.15)
+        self.assertEqual(self.summary["all_top2_share_%"], 90.99)
+
+    def test_fixed_pledges_have_zero_swing(self):
+        for label in ("City-owned grocery stores",
+                      "Dept. of Community Safety",
+                      "200k affordable units / 10 yrs"):
+            self.assertEqual(self.by_item[label]["swing_$M"], 0)
 
 
 if __name__ == "__main__":

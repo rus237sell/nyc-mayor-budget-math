@@ -1,0 +1,7 @@
+item,kind,low_$M,high_$M,mid_$M,swing_$M,share_of_operating_low_%,share_of_operating_high_%,share_of_operating_mid_%,share_of_all_mid_%,swing_share_of_operating_range_%,swing_share_of_total_range_%
+Fare-free buses,operating,700,800,750.0,100,9.02,5.46,6.69,3.54,1.45,1.45
+Universal childcare (6wk-5yr),operating,5900,12700,9300.0,6800,76.03,86.63,82.96,43.85,98.55,98.55
+City-owned grocery stores,operating,60,60,60.0,0,0.77,0.41,0.54,0.28,0.0,0.0
+Dept. of Community Safety,operating,1100,1100,1100.0,0,14.18,7.5,9.81,5.19,0.0,0.0
+Rent freeze (rent-stabilized),none,0,0,0.0,0,,,,0.0,0.0,0.0
+200k affordable units / 10 yrs,capital,10000,10000,10000.0,0,,,,47.15,0.0,0.0

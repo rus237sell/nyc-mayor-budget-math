@@ -375,6 +375,76 @@ def budget_share_rows():
     return rows
 
 
+def concentration_rows():
+    """Concentration / uncertainty-attribution lens (v11).
+
+    Every earlier cut totals the pledges; none asks how concentrated
+    the total is, or which pledge owns the uncertainty. On mid
+    estimates childcare is 82.96% of operating costs (76.03% at
+    campaign figures, 86.63% at analyst high) and the top two
+    operating pledges are 92.77%; the operating HHI is 7,024 (of
+    10,000), far above the 2,500 'highly concentrated' threshold used
+    for market concentration. The uncertainty is even more
+    concentrated than the level: childcare's $6,800M low-to-high
+    swing is 98.55% of both the operating and the total cost range,
+    and fare-free buses supply the other 1.45% -- every other pledge
+    is a single point estimate with no published range. All-pledge
+    concentration is lower (HHI 4,185) only because the $10B/yr
+    housing run rate (47.15% of the mid total) balances childcare
+    (43.85%); the top two pledges are still 90.99% of all pledges.
+    Non-operating pledges have no operating share (None).
+    """
+    op_low, op_high = annual_costs(kind="operating")
+    cost_low, cost_high = annual_costs()
+    op_mid = (op_low + op_high) / 2
+    cost_mid = (cost_low + cost_high) / 2
+    op_swing = op_high - op_low
+    cost_swing = cost_high - cost_low
+    rows = []
+    for label, low, high, kind, _note in PLEDGES:
+        mid = (low + high) / 2
+        swing = high - low
+        is_op = kind == "operating"
+        rows.append({
+            "item": label,
+            "kind": kind,
+            "low_$M": low,
+            "high_$M": high,
+            "mid_$M": mid,
+            "swing_$M": swing,
+            "share_of_operating_low_%": round(low / op_low * 100, 2) if is_op else None,
+            "share_of_operating_high_%": round(high / op_high * 100, 2) if is_op else None,
+            "share_of_operating_mid_%": round(mid / op_mid * 100, 2) if is_op else None,
+            "share_of_all_mid_%": round(mid / cost_mid * 100, 2),
+            "swing_share_of_operating_range_%": round(swing / op_swing * 100, 2),
+            "swing_share_of_total_range_%": round(swing / cost_swing * 100, 2),
+        })
+    return rows
+
+
+def concentration_summary():
+    """HHI and top-N shares on mid estimates, operating and all pledges."""
+    rows = concentration_rows()
+    op = [r for r in rows if r["kind"] == "operating"]
+    # HHI and top shares from unrounded mid shares, so they do not drift with the
+    # 2-decimal rounding used for display in concentration.csv.
+    op_mid_total = sum(r["mid_$M"] for r in op)
+    all_mid_total = sum(r["mid_$M"] for r in rows)
+    op_raw = sorted((r["mid_$M"] / op_mid_total * 100 for r in op),
+                    reverse=True)
+    all_raw = sorted((r["mid_$M"] / all_mid_total * 100 for r in rows),
+                     reverse=True)
+    return {
+        "operating_hhi_mid": round(sum(s * s for s in op_raw), 1),
+        "all_hhi_mid": round(sum(s * s for s in all_raw), 1),
+        "operating_top1_share_%": round(op_raw[0], 2),
+        "operating_top2_share_%": round(sum(op_raw[:2]), 2),
+        "all_top1_share_%": round(all_raw[0], 2),
+        "all_top2_share_%": round(sum(all_raw[:2]), 2),
+        "pledges_with_a_published_range": sum(1 for r in rows if r["swing_$M"] > 0),
+    }
+
+
 def main():
     cost_low, cost_high = annual_costs()
     revenue = proposed_revenue()
@@ -600,6 +670,17 @@ def main():
         "mid_share_of_FY27_budget_%"]
     gap_share = share_of_budget(FY27_GAP_BEFORE_CLOSING)
 
+    # ---- v11 cut: concentration / uncertainty attribution ----
+    conc_rows = concentration_rows()
+    conc_path = os.path.join(HERE, "concentration.csv")
+    with open(conc_path, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=list(conc_rows[0].keys()))
+        w.writeheader()
+        w.writerows(conc_rows)
+    conc = concentration_summary()
+    conc_by_item = {r["item"]: r for r in conc_rows}
+    cc_conc = conc_by_item["Universal childcare (6wk-5yr)"]
+
     fig5, ax5 = plt.subplots(figsize=(8, 3.8))
     rev_labels = [f"{r['realization_%']}%" for r in revenue_rows]
     rev_vals = [r["realized_revenue_$M"] / 1000 for r in revenue_rows]
@@ -767,6 +848,36 @@ def main():
     fig10.tight_layout()
     fig10.savefig(os.path.join(HERE, "results_budget_share.png"), dpi=120)
     plt.close(fig10)
+
+    # Concentration chart: operating pledges' mid share of operating
+    # costs vs their share of the operating cost range (the swing).
+    op_conc = [r for r in conc_rows if r["kind"] == "operating"]
+    fig11, ax11 = plt.subplots(figsize=(9, 4.4))
+    y11 = range(len(op_conc))
+    ax11.barh(list(y11),
+              [r["share_of_operating_mid_%"] for r in op_conc],
+              color="#1f4e79", label="Share of operating costs (mid)")
+    ax11.barh([i + 0.0 for i in y11],
+              [r["swing_share_of_operating_range_%"] for r in op_conc],
+              color="#b00020", alpha=0.45,
+              label="Share of operating cost range")
+    for i, r in enumerate(op_conc):
+        ax11.text(max(r["share_of_operating_mid_%"],
+                      r["swing_share_of_operating_range_%"]) + 2, i,
+                  f"{r['share_of_operating_mid_%']:.1f}% / "
+                  f"{r['swing_share_of_operating_range_%']:.1f}%",
+                  va="center", ha="left", fontsize=9)
+    ax11.set_xlim(0, 118)
+    ax11.set_yticks(list(y11))
+    ax11.set_yticklabels([r["item"].split(" (")[0] for r in op_conc],
+                         fontsize=10)
+    ax11.set_xlabel("Share (%) — level (mid) / uncertainty (low-to-high range)")
+    ax11.set_title("Operating pledges are concentrated in one item\n"
+                   "and so is their uncertainty (childcare, both times)")
+    ax11.legend(loc="lower right", fontsize=9)
+    fig11.tight_layout()
+    fig11.savefig(os.path.join(HERE, "results_concentration.png"), dpi=120)
+    plt.close(fig11)
 
     fig4, ax4 = plt.subplots(figsize=(8, 3.8))
     cc_labels = [r["childcare_case"] for r in childcare_rows]
@@ -1029,14 +1140,36 @@ def main():
           f"of the budget, "
           f"{gap_multiple(bs_by_item['All-pledge shortfall vs pledged revenue']['low_$M']):.2f}x "
           f"the $5.4B gap the enacted budget just closed.")
+    print()
+    print("--- Concentration / uncertainty attribution (mid estimates) ---")
+    for r in conc_rows:
+        op_share = r["share_of_operating_mid_%"]
+        print(f"{r['item']}: {r['share_of_all_mid_%']:.2f}% of all pledges, "
+              f"{'%.2f' % op_share if op_share is not None else 'n/a'}% of "
+              f"operating costs, swing ${r['swing_$M']/1000:.1f}B "
+              f"({r['swing_share_of_operating_range_%']:.2f}% of the "
+              f"operating range)")
+    print(f"Childcare is {cc_conc['share_of_operating_mid_%']:.2f}% of "
+          f"operating costs at mid estimates "
+          f"({cc_conc['share_of_operating_low_%']:.2f}% at campaign "
+          f"figures, {cc_conc['share_of_operating_high_%']:.2f}% at "
+          f"analyst high) and owns "
+          f"{cc_conc['swing_share_of_operating_range_%']:.2f}% of the "
+          f"operating cost range; operating HHI is "
+          f"{conc['operating_hhi_mid']:,.1f} and the top two operating "
+          f"pledges are {conc['operating_top2_share_%']:.2f}% of "
+          f"operating costs. Only "
+          f"{conc['pledges_with_a_published_range']} of 6 pledges carry "
+          f"a published low-to-high range at all.")
     print("Sources: SOURCES.md (results.csv, scenarios.csv, sensitivity.csv,")
     print("childcare_sensitivity.csv, revenue_sensitivity.csv,")
     print("joint_sensitivity.csv, childcare_albany.csv, horizon.csv,")
-    print("per_household.csv, budget_share.csv, results.png, results_operating.png,")
+    print("per_household.csv, budget_share.csv, concentration.csv, results.png, results_operating.png,")
     print("results_sensitivity.png,")
     print("results_childcare.png, results_revenue.png, results_joint.png,")
     print("results_childcare_albany.png, results_horizon.png,")
-    print("results_per_household.png, results_budget_share.png written).")
+    print("results_per_household.png, results_budget_share.png,")
+    print("results_concentration.png written).")
 
 
 if __name__ == "__main__":
